@@ -59,24 +59,24 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does: Searches the listings for a match to the provided description plus optional size and price ceiling.**
+- **Inputs: description (str), size (str), max_price(float)** <!-- name and type each: `max_price` (float), not "a price" -->
+- **Returns: a list of matching listing dicts, best match first**
+- **When it has nothing: returns an empty list**
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does: Given a thrifted item and the user's wardrobe, calls the model to suggest one or two outfits**
+- **Inputs: new_item (dict), wardrobe (dict)**
+- **Returns: A non-empty string with outfit suggestions if given a non-empty wardrobe**
+- **When it has nothing: A non-empty string with general styling advice if given an empty wardrobe**
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does: Calls the model to write a short caption that someone would use to post about the find**
+- **Inputs: outfit (str), new_item (dict)**
+- **Returns: A two to four sentence caption that could be included in a post**
+- **When it has nothing: A descriptive message about the new item**
 
 ---
 
