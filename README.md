@@ -263,13 +263,55 @@ that produced it:
 **Happy path**
 
 ```
+python .\app.py ask 'pants' --trace
+[1] parse_query
+      in:  pants
+      out: {'description': 'pants', 'size': None, 'max_price': None}
+[2] search_listings (VIA MCP)
+      in:  {'description': 'pants', 'size': None, 'max_price': None}
+      out: 2 items: Corduroy Wide-Leg Pants — Rust, Low-Rise Cargo Pants — Khaki
+      →    2 match(es)
+[3] select_item
+      out: Corduroy Wide-Leg Pants — Rust ($32.0, depop)
+[4] suggest_outfit
+      in:  Corduroy Wide-Leg Pants — Rust ($32.0, depop)
+      out: Outfit 1: Corduroy Wide-Leg Pants — Rust, White ribbed tank top, Brown leather belt, Vintage black denim jacke…
+[5] create_fit_card
+      in:  Corduroy Wide-Leg Pants — Rust ($32.0, depop)
+      out: Scored these gorgeous rust wide-leg cords on Depop for $32 and they are officially my new favorite pants for f…
 
+  Found:    Corduroy Wide-Leg Pants — Rust — $32.0 on depop
+
+  Outfit:   Outfit 1: Corduroy Wide-Leg Pants — Rust, White ribbed tank top, Brown leather belt, Vintage black denim jacket, Chunky white sneakers, Black crossbody bag.
+This outfit works because the brown belt anchors the rust pants to the slightly cropped jacket while the white tank and sneakers keep the look fresh and balanced.
+
+Outfit 2: Corduroy Wide-Leg Pants — Rust, Oversized grey crewneck sweatshirt, Black combat boots, Black crossbody bag.
+This outfit works because the oversized grey crewneck contrasts the warm rust cords while the combat boots ground the heavy proportions.
+
+The second-hand item is worth buying because it expands your pants options beyond denim and khaki while fitting easily into your existing earthy and casual wardrobe pieces.
+
+  Fit card: Scored these gorgeous rust wide-leg cords on Depop for $32 and they are officially my new favorite pants for fall. They have that perfect 70s vibe and look so good styled casually with an oversized grey crewneck and combat boots. Such an easy way to break away from standard denim while keeping things super cozy. #thriftedstyle
+
+2 model calls this session, 842 prompt + 222 output tokens
 ```
 
 **Empty search**
 
 ```
+python .\app.py ask 'coat' --trace
+[1] parse_query
+      in:  coat
+      out: {'description': 'coat', 'size': None, 'max_price': None}
+[2] search_listings (VIA MCP)
+      in:  {'description': 'coat', 'size': None, 'max_price': None}
+      out: [] (empty)
+      →    0 match(es)
+[3] branch
+      →    search returned []: stopping here before suggest outfit
 
+  Nothing in the listings matches "coat". Try describing the item in plainer words.
+
+0 model calls this session
 ```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
