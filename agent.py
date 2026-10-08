@@ -19,6 +19,7 @@ import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
+from mcp_client import call_tool
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -232,12 +233,20 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         if step == "parse":
             session["parsed"] = parse_query(session["query"])
             step = "search"
+            trace.step("parse_query", inputs=query, returned=str(session["parsed"]))
 
         elif step == "search":
             parsed = session["parsed"]
-            session["search_results"] = search_listings(
-                parsed["description"], parsed["size"], parsed["max_price"]
-            )
+            #session["search_results"] = search_listings(
+            #    parsed["description"], parsed["size"], parsed["max_price"]
+            #)
+            session["search_results"] = call_tool("search_listings", {
+                "description": parsed["description"],
+                "size": parsed["size"],
+                "max_price": parsed["max_price"],
+            })
+            trace.step("search_listings (VIA MCP)", inputs=str(session["parsed"]), returned=session["search_results"],
+                       note=f"{len(session['search_results'])} match(es)")
 
             # ── THE BRANCH ───────────────────────────────────────────────────
             # Nothing came back, so there is nothing to style. Say what the
@@ -245,6 +254,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             if not session["search_results"]:
                 session["error"] = _nothing_matched(parsed)
                 step = "stop"
+                trace.step("branch", note="search returned []: stopping here before suggest outfit")
             else:
                 step = "select"
 
@@ -254,6 +264,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             # reads the same value anyone debugging the run can see.
             session["selected_item"] = session["search_results"][0]
             step = "suggest"
+            trace.step("select_item", returned=session["selected_item"])
 
         elif step == "suggest":
             # The pick is read back out of the session, not carried in a local
@@ -263,12 +274,14 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             session["outfit_item_id"] = item["id"]
             session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
             step = "card"
+            trace.step("suggest_outfit", inputs=session["selected_item"], returned=session["outfit_suggestion"])
 
         elif step == "card":
             session["fit_card"] = create_fit_card(
                 session["outfit_suggestion"], session["selected_item"]
             )
             step = "stop"
+            trace.step("create_fit_card", inputs=session["selected_item"], returned=session["fit_card"])
 
         else:
             # A step name nothing sets. Without this the loop would spin until
