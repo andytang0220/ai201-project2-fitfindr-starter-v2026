@@ -2516,24 +2516,53 @@ full. -->
 
 **What I changed:**
 
+I made criterion 4 testable through the real loop. Before, the scenarios carried an `outfit_override` value that nothing read, so `create_fit_card` always got a real outfit and its empty-outfit branch never ran.
+
+- `agent.py::run_agent` takes a new optional argument, `outfit_override`. It is stored in `session["outfit_override"]` so it shows up in the session like any other state.
+- In the suggest step, when the override is a string (including `""` and whitespace), the loop skips the model call to `suggest_outfit`. It stores the override as `session["outfit_suggestion"]` and passes it to `create_fit_card`. `outfit_item_id` is still set, so criterion 3 still has its two records.
+- The trace names the case: `suggest_outfit (SKIPPED: outfit override)`, with the string it used. A run that used the hook cannot be mistaken for a normal run.
+- `run_eval.py::run_once` now passes the scenario's `outfit_override` into `run_agent`. `scenarios.py` has an updated comment saying the key is honored.
+
+Normal use is unchanged. The argument defaults to None, so `app.py` and `serve.py` behave as before.
+
 **Which failure it was meant to fix:**
+
+Criterion 4 in "Verdicts and Diagnoses": missed because it was never tested (0/5), not because the tool misbehaved. The mechanism was in the session and scenario wiring. `suggest_outfit` is written to never return an empty string, so a real run cannot reach the fit card's no-outfit branch, and the override that would have reached it was ignored. I did not touch the model-outage crashes (criteria 3 and 5), which stay unfixed. See "What the change does not show" below.
 
 ### Run Log — After
 
+Run: `python run_eval.py --label after`, 5 tries per scenario, caching off. Full output is in `results/run_2026-10-13_2300_after.md`.
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. matching query completes | 4/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. impossible query stops early | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| empty wardrobe _(diagnostic — not one of your five)_ | — | PASS | PASS | PASS | PASS | PASS | 5/5 completed |
+| 3. state: selected item reaches suggest_outfit (size filter) | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. state: selected item reaches suggest_outfit (shoe size) | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. state: selected item reaches suggest_outfit (no filters) | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. fit card with empty outfit | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. fit card with whitespace-only outfit | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. max_price: 'under $25' | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. max_price: 'max $20' | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. max_price: bare '$45' | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. max_price: boundary, item priced exactly at the ceiling | 5/5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+How the cells were judged, using the same rules as the Before table:
+
+- **1:** all three tools in the trace and a non-empty fit card.
+- **2:** the trace ends at the branch step with `suggest_outfit` never called.
+- **3:** the item on the `select_item` line equals the item in the `suggest_outfit` inputs.
+- **4:** the trace shows the override was used, and the fit card has no wearing or pairing language. All ten cards are the same plain line: the item's name, size, condition, price and platform, then "No outfit suggestion came through for this find, so there is no caption to go with it yet." The word "outfit" appears only to say there is none. I read that as a pass. If the criterion is meant to ban the word, it would fail.
+- **5:** every price in the full result list is at or under the ceiling, checked by re-running the deterministic search, as before.
 
 **Did it help, and how do I know:**
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+It fixed the one thing it targeted. Criterion 4 went from untested (0/5 on both rows) to 5/5 on both rows. The trace now shows `suggest_outfit (SKIPPED: outfit override)` on every one of those ten tries, so the evidence says the no-outfit branch ran. The fit card came out identical on all ten, which is expected, since that branch does not call the model.
 
+The rest of the table also improved, but that is not credit for this change. Criteria 1, 3 and 5 went from MISSED or 4/5 to a clean 5/5 only because the model outage did not recur: 0 of 60 tries crashed this time, against 13 of 60 before. I made no change that addresses the outage. The loop still has no `ModelUnavailable` handler, and `generate()` still treats a 503 as non-retryable. The next 503 will crash tries again. I should not claim the criterion 3 and 5 results as a fix.
 
+A limit on the criterion 4 result: it proves that `create_fit_card` handles an empty outfit and that the loop passes one through. It does not prove the agent ever produces one by itself, because `suggest_outfit` is built to avoid it. The override is a test hook, not a user path.
 
 ---
 
@@ -2543,7 +2572,19 @@ full. -->
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
+No criterion is missed in the After table, but the table is stronger than the system behind it. Four problems remain, in order of how much they worry me.
 
+**1. A model outage still crashes the run (criteria 3 and 5, and one try on criterion 1).**
+Before the change, 13 of 60 tries crashed on a 503 from the model. After, 0 of 60 did, and that is luck, not a fix. `generate()` in `generate.py` retries only rate-limit errors (429). A 503 "high demand" error is raised as `ModelUnavailable` on the first attempt. `run_agent` imports that exception but never catches it, so the session and trace are lost. What I would do: treat 503 as retryable in `generate()` with a short, capped backoff, and add a `try/except ModelUnavailable` in `run_agent` that sets `session["error"]` to a plain message and stops. I stopped here because the improvement was scoped to one change, and criterion 4 had no evidence at all while these had some. This is also the one unit 4 failure mode I have not handled: the other two, an impossible query and an empty wardrobe, both work.
+
+**2. Criterion 4 passes through a test hook, not through the agent's own behavior.**
+It shows that `create_fit_card` handles an empty outfit and that the loop passes one through. `suggest_outfit` never returns an empty string, so a real run cannot reach that branch, and there is no evidence about what the agent does when the model returns something thin. The pass also depends on my reading of the wording. The no-outfit line says "No outfit suggestion came through", which uses the word "outfit" to say there is none. What I would do: either revise the criterion under the original line in criteria.md to say it is checked on `create_fit_card` directly, or add a second branch after `suggest_outfit` that stops when the reply is empty or is the fallback string. I stopped because I did not want to rewrite the criterion just to make it fit the test.
+
+**3. Several criteria rest on one query each.**
+Criterion 1 uses one matching query, and criterion 2 uses one impossible query. Criterion 1's stated reason was that the keyword match might miss some phrasings. I never tried a phrasing meant to miss, so 4/5 was met by the model coming back, not by testing that risk. What I would do: add queries with plural forms, synonyms and typos, and check how many of them find a listing. I did not do it because the scenarios were written to match the five criteria as stated, and widening them would mean new targets.
+
+**4. The first result is always the pick.**
+The loop takes `search_results[0]` and never checks it against the size or the wardrobe. In the "90s track jacket size M" run, the search returned a leather bomber and a slip dress after the jacket, so the list is loose even when the first result is right. A weaker top match would go straight into the outfit and caption with no check. Nothing in the eval caught this, because every top result I looked at was sensible. What I would do: add a score threshold in the select step and branch to an error when the best match is weak. I have no evidence of a failure here, so it is a risk and not a bug.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
