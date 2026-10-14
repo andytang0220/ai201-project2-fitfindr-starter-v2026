@@ -35,18 +35,90 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
+    # ── Criterion 3: state ───────────────────────────────────────────────────
+    # "Across 5 matching queries, the id in session['selected_item'] is the
+    # same id that appears in the suggest_outfit trace line's inputs — 5/5."
     #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
+    # What matters is what lands in the session, not the wording, so these are
+    # ordinary matching queries chosen to exercise different parse shapes
+    # (a size filter, a bare shoe size, no filters at all). Each one is run
+    # five times by run_eval.py; compare selected_item["id"] against the
+    # inputs on the suggest_outfit trace line for every try.
+    {
+        "name": "state: selected item reaches suggest_outfit (size filter)",
+        "query": "90s track jacket size M",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        "name": "state: selected item reaches suggest_outfit (shoe size)",
+        "query": "black platform mary janes US 7",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        "name": "state: selected item reaches suggest_outfit (no filters)",
+        "query": "chunky knit cardigan one size",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    # ── Criterion 4: fit card with no outfit ─────────────────────────────────
+    # "Given an empty or whitespace-only outfit, the agent does not mention
+    # anything about how the item fits into an outfit — 5 of 5."
     #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
+    # suggest_outfit() never returns an empty string on purpose (it falls back
+    # to a non-empty message), so a plain query can't reach this branch on its
+    # own. "outfit_override" is the outfit string the fit-card step should be
+    # handed instead of suggest_outfit's reply. run_eval.py ignores keys it
+    # doesn't know, so run_agent / run_once must be taught to honour this key
+    # for these rows to test the branch; until then they only show the normal
+    # path for the same item. Two forms: empty, and whitespace-only.
+    {
+        "name": "fit card with empty outfit",
+        "query": "cropped denim jacket $45",
+        "wardrobe": "example",
+        "criterion": 4,
+        "outfit_override": "",
+    },
+    {
+        "name": "fit card with whitespace-only outfit",
+        "query": "cropped denim jacket $45",
+        "wardrobe": "example",
+        "criterion": 4,
+        "outfit_override": "   \n\t  ",
+    },
+    # ── Criterion 5: max_price is respected ──────────────────────────────────
+    # "The results of a search have a price <= the provided max_price in
+    # 5 of 5 tries, given that a max_price is provided."
     #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
+    # One query per price phrasing parse_query() accepts ("under $N",
+    # "max $N", a bare "$N"), plus a boundary case where the best match costs
+    # exactly max_price — the filter is inclusive, so it must still appear.
+    # Check every entry in session["search_results"], not just the pick.
+    {
+        "name": "max_price: 'under $25'",
+        "query": "oversized flannel shirt under $25",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "max_price: 'max $20'",
+        "query": "vintage band tee max $20",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "max_price: bare '$45'",
+        "query": "cropped denim jacket $45",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "max_price: boundary, item priced exactly at the ceiling",
+        "query": "graphic tee under $24",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
 ]
 
 WARDROBES = ("example", "empty")
