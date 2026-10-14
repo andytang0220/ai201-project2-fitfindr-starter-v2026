@@ -46,6 +46,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "wardrobe": wardrobe,        # the user's wardrobe
         "outfit_suggestion": None,   # what suggest_outfit returned
         "outfit_item_id": None,      # id of the item that actually reached suggest_outfit
+        "outfit_override": None,     # test hook: an outfit string to use instead of calling suggest_outfit
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
     }
@@ -179,7 +180,7 @@ def _nothing_matched(parsed: dict) -> str:
 
 # ── planning loop ─────────────────────────────────────────────────────────────
 
-def run_agent(query: str, wardrobe: dict) -> dict:
+def run_agent(query: str, wardrobe: dict, outfit_override: str | None = None) -> dict:
     """
     Run the loop once and return the finished session.
 
@@ -188,6 +189,13 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                   (e.g. "vintage graphic tee under $30, size M").
         wardrobe: a wardrobe dict — get_example_wardrobe() or
                   get_empty_wardrobe() from utils/data_loader.py.
+        outfit_override:
+                  A test hook, None in normal use. When it is a string (even
+                  "" or whitespace), the suggest step does not call
+                  suggest_outfit — it stores this string as the outfit and
+                  hands it to create_fit_card. suggest_outfit never returns an
+                  empty string, so this is the only way to reach the fit
+                  card's no-outfit branch through the loop (criterion 4).
 
     Returns:
         The session dict. **Check session["error"] first** — if it isn't None,
@@ -223,6 +231,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    session["outfit_override"] = outfit_override
     step = "parse"
     iterations = 0
 
@@ -272,9 +281,18 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             # records to compare: what was selected, and what the tool got.
             item = session["selected_item"]
             session["outfit_item_id"] = item["id"]
-            session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
+            if session["outfit_override"] is not None:
+                # Test hook: skip the model and feed the fit card the outfit
+                # we were given. The trace says so, so a run that used it can
+                # never be mistaken for a normal one.
+                session["outfit_suggestion"] = session["outfit_override"]
+                trace.step("suggest_outfit (SKIPPED: outfit override)",
+                           inputs=session["selected_item"],
+                           returned=repr(session["outfit_override"]))
+            else:
+                session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
+                trace.step("suggest_outfit", inputs=session["selected_item"], returned=session["outfit_suggestion"])
             step = "card"
-            trace.step("suggest_outfit", inputs=session["selected_item"], returned=session["outfit_suggestion"])
 
         elif step == "card":
             session["fit_card"] = create_fit_card(

@@ -52,7 +52,10 @@ def run_once(scenario, use_trace=True):
 
     record = {"error": None, "session": None, "trace": "", "crashed": None}
     try:
-        record["session"] = run_agent(scenario["query"], wardrobe)
+        record["session"] = run_agent(
+            scenario["query"], wardrobe,
+            outfit_override=scenario.get("outfit_override"),
+        )
     except Exception as exc:  # noqa: BLE001 — a crash is a result worth logging
         record["crashed"] = f"{type(exc).__name__}: {exc}"
         record["traceback"] = traceback.format_exc()

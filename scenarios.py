@@ -68,11 +68,10 @@ SCENARIOS = [
     #
     # suggest_outfit() never returns an empty string on purpose (it falls back
     # to a non-empty message), so a plain query can't reach this branch on its
-    # own. "outfit_override" is the outfit string the fit-card step should be
-    # handed instead of suggest_outfit's reply. run_eval.py ignores keys it
-    # doesn't know, so run_agent / run_once must be taught to honour this key
-    # for these rows to test the branch; until then they only show the normal
-    # path for the same item. Two forms: empty, and whitespace-only.
+    # own. "outfit_override" is the outfit string the fit-card step is handed
+    # instead of suggest_outfit's reply: run_once passes it to run_agent, which
+    # skips the suggest_outfit call and says so in the trace. Two forms: empty,
+    # and whitespace-only.
     {
         "name": "fit card with empty outfit",
         "query": "cropped denim jacket $45",
